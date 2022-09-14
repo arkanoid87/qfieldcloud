@@ -39,6 +39,7 @@ django-notifications-hq==1.6.0
 django-storages==1.11.1
 django-tables2==2.4.1
 django-timezone-field==4.2.1
+dj-stripe==2.6.2
 djangorestframework==3.12.4
 docker==4.2.2
 drf-yasg==1.20.0
