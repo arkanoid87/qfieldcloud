@@ -129,6 +129,9 @@ class ExtraPackageType(models.Model):
     display_name = models.CharField(max_length=100)
     is_public = models.BooleanField(default=False)
 
+    # Unit of measurement (e.g. gigabyte, minute, etc)
+    unit_label = models.TextField(null=True, blank=True)
+
 
 class ExtraPackageTypeStorage(ExtraPackageType):
     megabytes = models.PositiveIntegerField()

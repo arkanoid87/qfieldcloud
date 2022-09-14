@@ -17,4 +17,9 @@ class Migration(migrations.Migration):
                 choices=[(1, "Person"), (2, "Organization"), (3, "Team")], default=1
             ),
         ),
+        migrations.AddField(
+            model_name="extrapackagetype",
+            name="unit_label",
+            field=models.TextField(blank=True, null=True),
+        ),
     ]
