@@ -1,7 +1,7 @@
 from django.contrib import admin
 from django.contrib.admin import register
 
-from .models import ExtraPackageTypeJobMinutes, ExtraPackageTypeStorage, Plan
+from .models import ExtraPackageType, Plan
 
 
 @register(Plan)
@@ -16,10 +16,13 @@ class PlanAdmin(admin.ModelAdmin):
     ]
 
 
-@register(ExtraPackageTypeStorage, ExtraPackageTypeJobMinutes)
+@register(ExtraPackageType)
 class ExtraPackageTypeAdmin(admin.ModelAdmin):
     list_display = [
         "code",
         "is_public",
         "display_name",
+        "type",
+        "unit_amount",
+        "unit_label",
     ]

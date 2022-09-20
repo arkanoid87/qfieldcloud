@@ -11,7 +11,7 @@ from qfieldcloud.core.utils2.storage import delete_file_version
 from rest_framework import status
 from rest_framework.test import APITransactionTestCase
 
-from ..models import ExtraPackage, ExtraPackageTypeStorage, Plan
+from ..models import ExtraPackage, ExtraPackageType, Plan
 
 logging.disable(logging.CRITICAL)
 
@@ -54,8 +54,10 @@ class QfcTestCase(APITransactionTestCase):
         self.assertEqual(u1.useraccount.storage_quota_used_perc, 0)
 
         # Adding an extra package increases the quota
-        extra_2mb = ExtraPackageTypeStorage.objects.create(
-            code="extra_2mb", megabytes=2
+        extra_2mb = ExtraPackageType.objects.create(
+            unit_amount=2,
+            code="extra_2mb",
+            type=ExtraPackageType.Type.STORAGE,
         )
         ExtraPackage.objects.create(
             account=u1.useraccount,
@@ -162,8 +164,10 @@ class QfcTestCase(APITransactionTestCase):
     def test_api_enforces_storage_limit_for_reparenting(self):
         plan_1mb = Plan.objects.create(code="plan_1mb", storage_mb=1)
         plan_2mb = Plan.objects.create(code="plan_2mb", storage_mb=2)
-        extra_1mb = ExtraPackageTypeStorage.objects.create(
-            code="extra_1mb", display_name="extra_1mb", megabytes=1
+        extra_1mb = ExtraPackageType.objects.create(
+            unit_amount=1,
+            code="extra_1mb",
+            type=ExtraPackageType.Type.STORAGE,
         )
 
         u1 = Person.objects.create(username="u1")
