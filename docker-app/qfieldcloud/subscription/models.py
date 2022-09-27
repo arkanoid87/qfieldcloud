@@ -74,6 +74,9 @@ class Plan(models.Model):
     # the plan is marked as premium which assumes it has premium access
     is_premium = models.BooleanField(default=False)
 
+    # the plan is set as trial
+    is_trial = models.BooleanField(default=False)
+
     # The maximum number of organizations members that are allowed to be added per organization
     # This constraint is useful for public administrations with limited resources who want to cap
     # the maximum amount of money that they are going to pay.
@@ -94,6 +97,15 @@ class Plan(models.Model):
         default=-1,
         help_text=_(
             "Maximum premium collaborators per private project. Set -1 to allow unlimited project collaborators."
+        ),
+    )
+
+    # The maximum number of trial organizations that the user can create.
+    # Set -1 to allow unlimited trial organizations.
+    max_trial_organizations = models.IntegerField(
+        default=1,
+        help_text=_(
+            "Maximum number of trial organizations that the user can create. Set -1 to allow unlimited trial organizations."
         ),
     )
 
@@ -164,5 +176,5 @@ class ExtraPackage(models.Model):
             MinValueValidator(1),
         ],
     )
-    start_date = models.DateField()
+    start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
