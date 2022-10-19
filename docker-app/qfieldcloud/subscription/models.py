@@ -1,10 +1,14 @@
-from datetime import timedelta
+import logging
+import uuid
+from datetime import datetime, timedelta
 
 from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models, transaction
+from django.db.models import Q
+from django.utils import timezone
 from django.utils.translation import gettext as _
-from qfieldcloud.core.models import User
+from qfieldcloud.core.models import User, UserAccount
 
 
 class Plan(models.Model):
@@ -178,3 +182,193 @@ class ExtraPackage(models.Model):
     )
     start_date = models.DateField(null=True, blank=True)
     end_date = models.DateField(null=True, blank=True)
+
+
+# TODO add check constraint makes sure there are no two active extra packages at the same time,
+# because we assume that once you change your quantity, the old ExtraPackage instance has an end_date
+# and a new one with the new quantity is created right away.
+
+
+class SubscriptionQuerySet(models.QuerySet):
+    def active(self):
+        now = timezone.now()
+        qs = self.filter(
+            Q(active_since__lte=now)
+            & (Q(active_until__isnull=True) | Q(active_until__gte=now))
+        )
+
+        return qs
+
+
+class Subscription(models.Model):
+
+    objects = SubscriptionQuerySet.as_manager()
+
+    class Status(models.TextChoices):
+        """Status of the subscription.
+
+        Initially the status is INACTIVE_DRAFT.
+
+        INACTIVE_DRAFT -> (INACTIVE_DRAFT_EXPIRED, INACTIVE_REQUESTED_CREATE)
+        INACTIVE_REQUESTED_CREATE -> (INACTIVE_AWAITS_PAYMENT, INACTIVE_CANCELLED)
+
+        """
+
+        # the user drafted a subscription, initial status
+        INACTIVE_DRAFT = "inactive_draft", _("Inactive Draft")
+        # the user draft expired (e.g. a new subscription is attempted)
+        INACTIVE_DRAFT_EXPIRED = "inactive_draft_expired", _("Inactive Draft Expired")
+        # requested creating the subscription on Stripe
+        INACTIVE_REQUESTED_CREATE = "inactive Requested_create", _(
+            "Inactive_Requested Create"
+        )
+        # requested creating the subscription on Stripe
+        INACTIVE_AWAITS_PAYMENT = "inactive_awaits_payment", _(
+            "Inactive Awaits Payment"
+        )
+        # payment succeeded
+        ACTIVE_PAID = "active_paid", _("Active Paid")
+        # payment failed, but the subscription is still active
+        ACTIVE_PAST_DUE = "active_past_due", _("Active Past Due")
+        # successfully cancelled
+        INACTIVE_CANCELLED = "inactive_cancelled", _("Inactive Cancelled")
+
+    uuid = models.UUIDField(default=uuid.uuid4, editable=False, db_index=True)
+
+    plan = models.ForeignKey(
+        Plan,
+        on_delete=models.DO_NOTHING,
+        related_name="+",
+    )
+
+    account = models.ForeignKey(
+        UserAccount,
+        on_delete=models.CASCADE,
+        related_name="subscriptions",
+    )
+
+    storage_quantity = models.PositiveIntegerField(default=0)
+
+    status = models.CharField(
+        max_length=100, choices=Status.choices, default=Status.INACTIVE_DRAFT
+    )
+
+    created_by = models.ForeignKey(
+        User,
+        on_delete=models.CASCADE,
+        related_name="+",
+    )
+
+    created_at = models.DateTimeField(_("Created at"), auto_now_add=True)
+
+    updated_at = models.DateTimeField(_("Updated at"), auto_now=True)
+
+    requested_cancel_at = models.DateTimeField(
+        _("Requested cancel at"), null=True, blank=True
+    )
+
+    # the time since the subscription is active. Note the value is null until the subscription is valid.
+    active_since = models.DateTimeField(_("Active since"), null=True, blank=True)
+
+    active_until = models.DateTimeField(_("Active until"), null=True, blank=True)
+
+    @classmethod
+    def get_or_create_active_subscription(cls, account: UserAccount) -> "Subscription":
+        """Returns the currently active subscription, if not exists returns a newly created subscription with the default plan.
+
+        Args:
+            account (UserAccount): the account the subscription belongs to.
+
+        Returns:
+            Subscription: the currently active subscription
+        """
+        try:
+            subscription = cls.objects.active().get(account_id=account.pk)
+        except cls.DoesNotExist:
+            subscription = cls.create_default_plan_subscription(account)
+
+        return subscription
+
+    @classmethod
+    def update_subscription(
+        cls,
+        subscription: "Subscription",
+        status: Status,
+        active_since: datetime,
+        active_until: datetime = None,
+        **kwargs,
+    ) -> "Subscription":
+        with transaction.atomic():
+            subscription = cls.objects.select_for_update().get(id=subscription.id)
+
+            # all other active subscriptions must be cancelled
+            update_count = (
+                cls.objects.active()
+                .filter(
+                    account_id=subscription.account_id,
+                )
+                .exclude(
+                    pk=subscription.pk,
+                )
+                .update(
+                    status=cls.Status.INACTIVE_CANCELLED,
+                    active_until=active_since,
+                )
+            )
+
+            logging.info(f"Updated {update_count} previously active subscription(s)")
+
+            subscription.status = status
+            subscription.active_since = active_since
+            subscription.active_until = active_until
+
+            update_fields = ["status", "active_since", "active_until"]
+
+            for attr_name, attr_value in kwargs.items():
+                update_fields.append(attr_name)
+                setattr(subscription, attr_name, attr_value)
+
+            subscription.save(update_fields=update_fields)
+
+        return subscription
+
+    @classmethod
+    def create_default_plan_subscription(
+        cls, account: UserAccount, active_since: datetime = None
+    ) -> "Subscription":
+        """Activates the default (free) subscription for a given account.
+
+        Args:
+            account (UserAccount): the account the subscription belongs to.
+            active_since (datetime): active since for the subscription
+
+        Raises:
+            Exception: If the account already has an account, raises an exception.
+
+        Returns:
+            Subscription: the currently active subscription.
+        """
+        active_subscription = cls.objects.active().filter(account=account)
+
+        if active_subscription:
+            raise Exception(
+                f"There is already an active subscription {active_subscription.id} for this account."
+            )
+
+        if active_since is None:
+            active_since = timezone.now()
+
+        plan = Plan.objects.get(
+            user_type=account.user.type,
+            is_default=True,
+        )
+
+        subscription = cls.objects.create(
+            plan=plan,
+            account=account,
+            created_by=account.user,
+            status=cls.Status.ACTIVE_PAID,
+            active_since=active_since,
+        )
+
+        return subscription

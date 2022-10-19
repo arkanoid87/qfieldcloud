@@ -12,6 +12,8 @@ import django_cryptography.fields
 import qfieldcloud.core.utils2.storage
 from auditlog.registry import auditlog
 from deprecated import deprecated
+from django.apps import apps
+from django.conf import settings
 from django.contrib.auth.models import AbstractUser, UserManager
 from django.contrib.gis.db import models
 from django.core.exceptions import ValidationError
@@ -31,6 +33,10 @@ from qfieldcloud.core import geodb_utils, utils, validators
 from timezone_field import TimeZoneField
 
 # http://springmeblog.com/2018/how-to-implement-multiple-user-types-with-django/
+
+
+def get_subscription_model():
+    return apps.get_model(settings.QFIELDCLOUD_SUBSCRIPTIONS_MODEL)
 
 
 class PersonQueryset(models.QuerySet):
@@ -192,7 +198,6 @@ class PersonManager(UserManager):
         return self.get_queryset().for_entity(entity)
 
 
-# TODO change types to Enum
 class User(AbstractUser):
     """User model. Used as base for organizations and teams too.
 
@@ -374,11 +379,6 @@ class UserAccount(models.Model):
 
     user = models.OneToOneField(User, on_delete=models.CASCADE, primary_key=True)
 
-    plan = models.ForeignKey(
-        "subscription.Plan",
-        on_delete=models.PROTECT,
-    )
-
     # These will be moved one day to extrapackage. We don't touch for now (they are only used
     # in some tests)
     db_limit_mb = models.PositiveIntegerField(default=25)
@@ -404,6 +404,11 @@ class UserAccount(models.Model):
     )
 
     @property
+    def active_subscription(self):
+        Subscription = get_subscription_model()
+        return Subscription.get_or_create_active_subscription(self)
+
+    @property
     def avatar_url(self):
         if self.avatar_uri:
             return reverse_lazy(
@@ -414,18 +419,31 @@ class UserAccount(models.Model):
             return None
 
     @property
+    def active_storage_package(self):
+        from qfieldcloud.subscription.models import ExtraPackageType
+
+        storage_package_qs = self.extra_packages.filter(
+            Q(type__type=ExtraPackageType.Type.STORAGE)
+            & Q(start_date__lte=timezone.now())
+            & (Q(end_date__isnull=True) | Q(end_date__gte=timezone.now()))
+        )
+        count = storage_package_qs.count()
+
+        if count:
+            assert (
+                count == 1
+            ), "There must be only one active storage package at a time!"
+
+            return storage_package_qs.first()
+        else:
+            return None
+
+    @property
     def storage_quota_total_mb(self) -> float:
         """Returns the storage quota left in MB (quota from account and extrapackages minus storage of all owned projects)"""
 
         base_quota = self.plan.storage_mb
-
-        extra_quota = (
-            self.extra_packages.filter(
-                Q(start_date__lte=timezone.now())
-                & (Q(end_date__isnull=True) | Q(end_date__gte=timezone.now()))
-            ).aggregate(sum_mb=Sum(F("type__unit_amount") * F("quantity")))["sum_mb"]
-            or 0
-        )
+        extra_quota = self.active_storage_package or 0
 
         return base_quota + extra_quota
 
@@ -450,9 +468,6 @@ class UserAccount(models.Model):
         return max(
             0, min(self.storage_quota_used_mb / self.storage_quota_total_mb * 100, 100)
         )
-
-    def __str__(self):
-        return f"Account {self.plan}"
 
 
 class Geodb(models.Model):

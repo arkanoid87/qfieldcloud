@@ -262,3 +262,17 @@ class QfcTestCase(APITransactionTestCase):
 
         with self.assertRaises(ValidationError):
             OrganizationMember.objects.create(member=u3, organization=o2)
+
+    def test_max_trial_organizations(self):
+        u1 = Person.objects.create(username="u1")
+        plan = Plan.objects.create(
+            code="max_organization_members_plus1",
+            user_type=User.Type.ORGANIZATION,
+            max_trial_organizations=0,
+        )
+
+        u1.useraccount.plan = plan
+        u1.useraccount.save()
+
+        with self.assertRaises(ValidationError):
+            Organization.objects.create(username="o1", organization_owner=u1)

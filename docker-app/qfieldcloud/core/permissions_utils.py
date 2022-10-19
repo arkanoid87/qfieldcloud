@@ -721,3 +721,19 @@ def can_send_invitations(user: QfcUser, account: QfcUser) -> bool:
         return True
 
     return False
+
+
+def can_read_billing(user: QfcUser, account: QfcUser) -> bool:
+    if user_eq(user, account):
+        return True
+
+    if account.is_organization:
+        return user_has_organization_role_origins(
+            user,
+            account,
+            [
+                OrganizationQueryset.RoleOrigins.ORGANIZATIONOWNER,
+            ],
+        )
+    else:
+        return False
