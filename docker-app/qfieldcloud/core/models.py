@@ -25,7 +25,6 @@ from django.db.models import When
 from django.db.models.aggregates import Count, Sum
 from django.db.models.fields.json import JSONField
 from django.urls import reverse_lazy
-from django.utils import timezone
 from django.utils.functional import cached_property
 from django.utils.translation import gettext as _
 from model_utils.managers import InheritanceManager
@@ -419,31 +418,11 @@ class UserAccount(models.Model):
             return None
 
     @property
-    def active_storage_package(self):
-        from qfieldcloud.subscription.models import ExtraPackageType
-
-        storage_package_qs = self.extra_packages.filter(
-            Q(type__type=ExtraPackageType.Type.STORAGE)
-            & Q(start_date__lte=timezone.now())
-            & (Q(end_date__isnull=True) | Q(end_date__gte=timezone.now()))
-        )
-        count = storage_package_qs.count()
-
-        if count:
-            assert (
-                count == 1
-            ), "There must be only one active storage package at a time!"
-
-            return storage_package_qs.first()
-        else:
-            return None
-
-    @property
     def storage_quota_total_mb(self) -> float:
         """Returns the storage quota left in MB (quota from account and extrapackages minus storage of all owned projects)"""
 
-        base_quota = self.plan.storage_mb
-        extra_quota = self.active_storage_package or 0
+        base_quota = self.active_subscription.plan.storage_mb
+        extra_quota = self.active_subscription.active_storage_package_mb
 
         return base_quota + extra_quota
 
@@ -466,6 +445,13 @@ class UserAccount(models.Model):
     def storage_quota_used_perc(self) -> float:
         """Returns the storage used in percentage (%) of the total storage"""
         return max(
+            0, min(self.storage_quota_used_mb / self.storage_quota_total_mb * 100, 100)
+        )
+
+    @property
+    def storage_quota_left_perc(self) -> float:
+        """Returns the storage used in percentage (%) of the total storage"""
+        return 100 - max(
             0, min(self.storage_quota_used_mb / self.storage_quota_total_mb * 100, 100)
         )
 

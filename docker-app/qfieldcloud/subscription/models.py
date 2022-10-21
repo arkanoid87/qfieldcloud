@@ -1,4 +1,5 @@
 import logging
+import math
 import uuid
 from datetime import datetime, timedelta
 
@@ -166,11 +167,25 @@ class ExtraPackageType(models.Model):
     unit_label = models.CharField(max_length=100, null=True, blank=True)
 
 
+class ExtraPackageQuerySet(models.QuerySet):
+    def active(self):
+        now = timezone.now()
+        qs = self.filter(
+            Q(active_since__lte=now)
+            & (Q(active_until__isnull=True) | Q(active_until__gte=now))
+        )
+
+        return qs
+
+
 class ExtraPackage(models.Model):
-    account = models.ForeignKey(
-        "core.UserAccount",
+
+    objects = ExtraPackageQuerySet.as_manager()
+
+    subscription = models.ForeignKey(
+        "subscription.Subscription",
         on_delete=models.CASCADE,
-        related_name="extra_packages",
+        related_name="packages",
     )
     type = models.ForeignKey(
         ExtraPackageType, on_delete=models.CASCADE, related_name="packages"
@@ -180,8 +195,8 @@ class ExtraPackage(models.Model):
             MinValueValidator(1),
         ],
     )
-    start_date = models.DateField(null=True, blank=True)
-    end_date = models.DateField(null=True, blank=True)
+    active_since = models.DateTimeField()
+    active_until = models.DateTimeField(null=True, blank=True)
 
 
 # TODO add check constraint makes sure there are no two active extra packages at the same time,
@@ -271,6 +286,74 @@ class Subscription(models.Model):
     active_since = models.DateTimeField(_("Active since"), null=True, blank=True)
 
     active_until = models.DateTimeField(_("Active until"), null=True, blank=True)
+
+    @property
+    def active_storage_package(self) -> ExtraPackage:
+        from qfieldcloud.subscription.models import ExtraPackageType
+
+        storage_package_qs = self.packages.active().filter(
+            Q(type__type=ExtraPackageType.Type.STORAGE)
+        )
+
+        return storage_package_qs.first()
+
+    @property
+    def active_storage_package_quantity(self) -> int:
+        return (
+            self.active_storage_package.quantity if self.active_storage_package else 0
+        )
+
+    @property
+    def active_storage_package_mb(self) -> int:
+        return (
+            self.active_storage_package.quantity * 1000
+            if self.active_storage_package
+            else 0
+        )
+
+    @property
+    def min_storage_package_quantity(self) -> int:
+        used = self.account.storage_quota_used_mb
+        included = self.plan.storage_mb
+
+        return math.ceil(max(used - included, 0) / 1000)
+
+    def update_package_quantity(
+        self,
+        package_type: ExtraPackageType,
+        quantity: int,
+    ):
+        assert (
+            self.plan.is_premium
+        ), "Only premium accounts can have additional packages!"
+
+        with transaction.atomic():
+            now = timezone.now()
+            new_package = None
+
+            try:
+                old_package = (
+                    ExtraPackage.objects.active()
+                    .select_for_update()
+                    .get(
+                        subscription=self.subscription,
+                        type=package_type,
+                    )
+                )
+                old_package.active_until = now
+                old_package.save(update_fields=["active_until"])
+            except ExtraPackage.DoesNotExist:
+                old_package = None
+
+            if quantity > 0:
+                new_package = ExtraPackage.objects.create(
+                    subscription=self,
+                    quantity=quantity,
+                    type=package_type,
+                    active_since=now,
+                )
+
+        return new_package
 
     @classmethod
     def get_or_create_active_subscription(cls, account: UserAccount) -> "Subscription":
