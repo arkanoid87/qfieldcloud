@@ -418,6 +418,9 @@ class UserAccount(models.Model):
             return None
 
     @property
+    @deprecated(
+        "Use `UserAccount().active_subscription.active_storage_total_mb` instead."
+    )
     def storage_quota_total_mb(self) -> float:
         """Returns the storage quota left in MB (quota from account and extrapackages minus storage of all owned projects)"""
 
@@ -427,7 +430,27 @@ class UserAccount(models.Model):
         return base_quota + extra_quota
 
     @property
+    @deprecated("Use `UserAccount().storage_used_mb` instead.")
     def storage_quota_used_mb(self) -> float:
+        return self.storage_used_mb
+
+    @property
+    @deprecated("Use `UserAccount().storage_free_mb` instead.")
+    def storage_quota_left_mb(self) -> float:
+        return self.storage_free_mb
+
+    @property
+    @deprecated("Use `UserAccount().storage_used_ratio` instead")
+    def storage_quota_used_perc(self) -> float:
+        return self.storage_used_ratio
+
+    @property
+    @deprecated("Use `UserAccount().storage_free_ratio` instead")
+    def storage_quota_left_perc(self) -> float:
+        return self.storage_free_ratio
+
+    @property
+    def storage_used_mb(self) -> float:
         """Returns the storage used in MB"""
         used_quota = (
             self.user.projects.aggregate(sum_mb=Sum("storage_size_mb"))["sum_mb"] or 0
@@ -436,23 +459,31 @@ class UserAccount(models.Model):
         return used_quota
 
     @property
-    def storage_quota_left_mb(self) -> float:
+    def storage_free_mb(self) -> float:
         """Returns the storage quota left in MB (quota from account and extrapackages minus storage of all owned projects)"""
 
-        return self.storage_quota_total_mb - self.storage_quota_used_mb
+        return self.active_subscription.active_storage_total_mb - self.storage_used_mb
 
     @property
-    def storage_quota_used_perc(self) -> float:
-        """Returns the storage used in percentage (%) of the total storage"""
+    def storage_used_ratio(self) -> float:
+        """Returns the storage used in fraction of the total storage"""
         return max(
-            0, min(self.storage_quota_used_mb / self.storage_quota_total_mb * 100, 100)
+            0,
+            min(
+                self.storage_used_mb / self.active_subscription.active_storage_total_mb,
+                1,
+            ),
         )
 
     @property
-    def storage_quota_left_perc(self) -> float:
-        """Returns the storage used in percentage (%) of the total storage"""
-        return 100 - max(
-            0, min(self.storage_quota_used_mb / self.storage_quota_total_mb * 100, 100)
+    def storage_free_ratio(self) -> float:
+        """Returns the storage used in fraction of the total storage"""
+        return 1 - max(
+            0,
+            min(
+                self.storage_used_mb / self.active_subscription.active_storage_total_mb,
+                1,
+            ),
         )
 
 

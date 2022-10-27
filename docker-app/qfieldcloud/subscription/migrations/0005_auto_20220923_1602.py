@@ -133,6 +133,18 @@ class Migration(migrations.Migration):
                     ),
                 ),
                 (
+                    "billing_cycle_anchor_at",
+                    models.DateTimeField(blank=True, null=True),
+                ),
+                (
+                    "current_period_since",
+                    models.DateTimeField(blank=True, null=True),
+                ),
+                (
+                    "current_period_until",
+                    models.DateTimeField(blank=True, null=True),
+                ),
+                (
                     "requested_cancel_at",
                     models.DateTimeField(
                         blank=True, null=True, verbose_name="Requested cancel at"

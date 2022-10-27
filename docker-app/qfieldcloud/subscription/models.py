@@ -1,5 +1,4 @@
 import logging
-import math
 import uuid
 from datetime import datetime, timedelta
 
@@ -177,6 +176,12 @@ class ExtraPackageQuerySet(models.QuerySet):
 
         return qs
 
+    def future(self):
+        now = timezone.now()
+        qs = self.filter(Q(active_since__gte=now)).order_by("active_since")
+
+        return qs
+
 
 class ExtraPackage(models.Model):
 
@@ -287,48 +292,105 @@ class Subscription(models.Model):
 
     active_until = models.DateTimeField(_("Active until"), null=True, blank=True)
 
+    # the timestamp used for time calculations when the billing period starts and ends
+    billing_cycle_anchor_at = models.DateTimeField(null=True, blank=True)
+
+    # the timestamp when the current billing period started
+    # NOTE this field remains currently unused.
+    current_period_since = models.DateTimeField(null=True, blank=True)
+
+    # the timestamp when the current billing period ends
+    # NOTE ignored for subscription validity checks, but used to calculate the activation date when extra packages change
+    current_period_until = models.DateTimeField(null=True, blank=True)
+
+    @property
+    def active_storage_total_mb(self) -> int:
+        return self.plan.storage_mb + self.active_storage_package_mb
+
     @property
     def active_storage_package(self) -> ExtraPackage:
-        from qfieldcloud.subscription.models import ExtraPackageType
-
-        storage_package_qs = self.packages.active().filter(
-            Q(type__type=ExtraPackageType.Type.STORAGE)
+        return self.get_active_package(
+            ExtraPackageType.objects.get(type=ExtraPackageType.Type.STORAGE)
         )
-
-        return storage_package_qs.first()
 
     @property
     def active_storage_package_quantity(self) -> int:
-        return (
-            self.active_storage_package.quantity if self.active_storage_package else 0
+        return self.get_active_package_quantity(
+            ExtraPackageType.objects.get(type=ExtraPackageType.Type.STORAGE)
         )
 
     @property
     def active_storage_package_mb(self) -> int:
         return (
-            self.active_storage_package.quantity * 1000
-            if self.active_storage_package
-            else 0
+            self.get_active_package_quantity(
+                ExtraPackageType.objects.get(type=ExtraPackageType.Type.STORAGE)
+            )
+            * 1000
         )
 
     @property
-    def min_storage_package_quantity(self) -> int:
-        used = self.account.storage_quota_used_mb
-        included = self.plan.storage_mb
+    def future_storage_total_mb(self) -> int:
+        return self.plan.storage_mb + self.future_storage_package_mb
 
-        return math.ceil(max(used - included, 0) / 1000)
+    @property
+    def future_storage_package(self) -> ExtraPackage:
+        return self.get_future_package(
+            ExtraPackageType.objects.get(type=ExtraPackageType.Type.STORAGE)
+        )
+
+    @property
+    def future_storage_package_quantity(self) -> int:
+        return self.get_future_package_quantity(
+            ExtraPackageType.objects.get(type=ExtraPackageType.Type.STORAGE)
+        )
+
+    @property
+    def future_storage_package_mb(self) -> int:
+        return (
+            self.get_future_package_quantity(
+                ExtraPackageType.objects.get(type=ExtraPackageType.Type.STORAGE)
+            )
+            * 1000
+        )
+
+    @property
+    def future_storage_package_changed_mb(self) -> int:
+        if self.future_storage_package:
+            return self.active_storage_package_mb - self.future_storage_package_mb
+        else:
+            return 0
+
+    def get_active_package(self, package_type: ExtraPackageType) -> ExtraPackage:
+        storage_package_qs = self.packages.active().filter(Q(type=package_type))
+
+        return storage_package_qs.first()
+
+    def get_active_package_quantity(self, package_type: ExtraPackageType) -> int:
+        package = self.get_active_package(package_type)
+        return package.quantity if package else 0
+
+    def get_future_package(self, package_type: ExtraPackageType) -> ExtraPackage:
+        storage_package_qs = self.packages.future().filter(Q(type=package_type))
+
+        return storage_package_qs.first()
+
+    def get_future_package_quantity(self, package_type: ExtraPackageType) -> int:
+        package = self.get_future_package(package_type)
+        return package.quantity if package else 0
 
     def update_package_quantity(
         self,
         package_type: ExtraPackageType,
         quantity: int,
+        active_since: datetime = None,
     ):
         assert (
             self.plan.is_premium
         ), "Only premium accounts can have additional packages!"
 
         with transaction.atomic():
-            now = timezone.now()
+            if active_since is None:
+                active_since = timezone.now()
             new_package = None
 
             try:
@@ -340,20 +402,26 @@ class Subscription(models.Model):
                         type=package_type,
                     )
                 )
-                old_package.active_until = now
+                old_package.active_until = active_since
                 old_package.save(update_fields=["active_until"])
             except ExtraPackage.DoesNotExist:
                 old_package = None
+
+            # delete future packages for that subscription, as we would create a new one if needed
+            ExtraPackage.objects.future().filter(
+                subscription=self.subscription,
+                type=package_type,
+            ).delete()
 
             if quantity > 0:
                 new_package = ExtraPackage.objects.create(
                     subscription=self,
                     quantity=quantity,
                     type=package_type,
-                    active_since=now,
+                    active_since=active_since,
                 )
 
-        return new_package
+        return old_package, new_package
 
     @classmethod
     def get_or_create_active_subscription(cls, account: UserAccount) -> "Subscription":
