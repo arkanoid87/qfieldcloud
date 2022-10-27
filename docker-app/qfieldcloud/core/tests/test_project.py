@@ -352,8 +352,10 @@ class QfcTestCase(APITestCase):
         o = Organization.objects.create(username="o", organization_owner=u)
         p = Project.objects.create(name="p", owner=u, is_public=True)
 
-        u.useraccount.plan.max_premium_collaborators_per_private_project = 0
-        u.useraccount.plan.save()
+        u.useraccount.active_subscription.plan.max_premium_collaborators_per_private_project = (
+            0
+        )
+        u.useraccount.active_subscription.plan.save()
 
         apiurl = f"/api/v1/projects/{p.pk}/"
 

@@ -204,29 +204,33 @@ class QfcTestCase(APITestCase):
             is_premium=True,
             max_premium_collaborators_per_private_project=0,
         )
-        u1.useraccount.plan = premium_plan
-        u1.useraccount.save()
+        u1.useraccount.active_subscription.plan = premium_plan
+        u1.useraccount.active_subscription.save()
         assertBecomeCollaborator(u2, p1, perms.ReachedCollaboratorLimitError)
 
         # non-premium user cannot collaborate on private user project with max_premium_collaborators set to 1
-        u1.useraccount.plan.max_premium_collaborators_per_private_project = 1
-        u1.useraccount.plan.save()
+        u1.useraccount.active_subscription.plan.max_premium_collaborators_per_private_project = (
+            1
+        )
+        u1.useraccount.active_subscription.plan.save()
         assertBecomeCollaborator(u2, p1, perms.ExpectedPremiumUserError)
 
         # premium user can collaborate on private user project with max_premium_collaborators set to 1
-        default_plan = u2.useraccount.plan
-        u2.useraccount.plan = premium_plan
-        u2.useraccount.plan.save()
+        default_plan = u2.useraccount.active_subscription.plan
+        u2.useraccount.active_subscription.plan = premium_plan
+        u2.useraccount.active_subscription.plan.save()
         assertBecomeCollaborator(u2, p1, None)
 
         # non-premium user can collaborate on public user project with max_premium_collaborators set to 1
-        u2.useraccount.plan = default_plan
-        u2.useraccount.plan.save()
+        u2.useraccount.active_subscription.plan = default_plan
+        u2.useraccount.active_subscription.plan.save()
         p1.is_public = True
         p1.save()
         assertBecomeCollaborator(u2, p1, None)
 
         # non-premium user can collaborate on public user project with max_premium_collaborators set to 0
-        u1.useraccount.plan.max_premium_collaborators_per_private_project = 0
-        u1.useraccount.plan.save()
+        u1.useraccount.active_subscription.plan.max_premium_collaborators_per_private_project = (
+            0
+        )
+        u1.useraccount.active_subscription.plan.save()
         assertBecomeCollaborator(u2, p1, None)

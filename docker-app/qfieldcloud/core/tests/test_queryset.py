@@ -141,8 +141,10 @@ class QfcTestCase(APITestCase):
         )
 
         # update user default plan to disable collaborations
-        self.user1.useraccount.plan.max_premium_collaborators_per_private_project = 0
-        self.user1.useraccount.plan.save()
+        self.user1.useraccount.active_subscription.plan.max_premium_collaborators_per_private_project = (
+            0
+        )
+        self.user1.useraccount.active_subscription.plan.save()
 
     def assertProjectRole(
         self,

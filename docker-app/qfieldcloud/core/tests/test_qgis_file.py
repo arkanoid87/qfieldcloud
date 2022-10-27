@@ -515,8 +515,8 @@ class QfcTestCase(APITransactionTestCase):
         self.client.credentials(HTTP_AUTHORIZATION="Token " + self.token1.key)
 
         acctype_3 = Plan.objects.create(storage_keep_versions=3, code="acc3")
-        self.user1.useraccount.plan = acctype_3
-        self.user1.useraccount.save()
+        self.user1.useraccount.active_subscription.plan = acctype_3
+        self.user1.useraccount.active_subscription.save()
 
         def count_versions():
             """counts the versions in first file of project1"""
@@ -576,8 +576,8 @@ class QfcTestCase(APITransactionTestCase):
 
         # As PRO account, 10 version should be kept out of 20
         acctype_10 = Plan.objects.create(storage_keep_versions=10, code="acc10")
-        self.user1.useraccount.plan = acctype_10
-        self.user1.useraccount.save()
+        self.user1.useraccount.active_subscription.plan = acctype_10
+        self.user1.useraccount.active_subscription.save()
         for i in range(20):
             test_file = io.StringIO(f"v{i}")
             self.client.post(apipath, {"file": test_file}, format="multipart")
@@ -587,8 +587,8 @@ class QfcTestCase(APITransactionTestCase):
 
         # As COMMUNITY account, 3 version should be kept
         acctype_3 = Plan.objects.create(storage_keep_versions=3, code="acc3")
-        self.user1.useraccount.plan = acctype_3
-        self.user1.useraccount.save()
+        self.user1.useraccount.active_subscription.plan = acctype_3
+        self.user1.useraccount.active_subscription.save()
 
         # But first we check that uploading to another project doesn't affect a projct
         otherproj = Project.objects.create(name="other", owner=self.user1)

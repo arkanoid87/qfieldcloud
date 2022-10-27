@@ -46,8 +46,8 @@ class QfcTestCase(APITransactionTestCase):
 
         # Changing account type changes the quota
         plan_1mb = Plan.objects.create(code="plan_1mb", storage_mb=1)
-        u1.useraccount.plan = plan_1mb
-        u1.useraccount.save()
+        u1.useraccount.active_subscription.plan = plan_1mb
+        u1.useraccount.active_subscription.save()
         self.assertEqual(u1.useraccount.storage_quota_left_mb, 1)
         self.assertEqual(u1.useraccount.storage_quota_used_mb, 0)
         self.assertEqual(u1.useraccount.storage_quota_total_mb, 1)
@@ -142,8 +142,8 @@ class QfcTestCase(APITransactionTestCase):
         u1 = Person.objects.create(username="u1")
         p1 = Project.objects.create(name="p1", owner=u1)
         plan_1mb = Plan.objects.create(code="plan_1mb", storage_mb=1)
-        u1.useraccount.plan = plan_1mb
-        u1.useraccount.save()
+        u1.useraccount.active_subscription.plan = plan_1mb
+        u1.useraccount.active_subscription.save()
 
         self._login(u1)
 
@@ -171,12 +171,12 @@ class QfcTestCase(APITransactionTestCase):
         )
 
         u1 = Person.objects.create(username="u1")
-        u1.useraccount.plan = plan_1mb
-        u1.useraccount.save()
+        u1.useraccount.active_subscription.plan = plan_1mb
+        u1.useraccount.active_subscription.save()
 
         u2 = Person.objects.create(username="u2")
-        u2.useraccount.plan = plan_2mb
-        u2.useraccount.save()
+        u2.useraccount.active_subscription.plan = plan_2mb
+        u2.useraccount.active_subscription.save()
 
         p1 = Project.objects.create(name="p1", owner=u2)
 

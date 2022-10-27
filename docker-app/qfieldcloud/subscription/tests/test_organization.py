@@ -80,12 +80,12 @@ class QfcTestCase(APITransactionTestCase):
         u8 = Person.objects.create(username="u8")
 
         org01 = Organization.objects.create(username="org01", organization_owner=u1)
-        org01.useraccount.plan = Plan.objects.create(
+        org01.useraccount.active_subscription.plan = Plan.objects.create(
             code="test_plan",
             user_type=User.Type.ORGANIZATION,
             is_premium=True,
         )
-        org01.useraccount.save()
+        org01.useraccount.active_subscription.save()
         org01.members.create(member=u2, role=OrganizationMember.Roles.ADMIN)
         org01.members.create(member=u3, role=OrganizationMember.Roles.MEMBER)
         org01.members.create(member=u4, role=OrganizationMember.Roles.MEMBER)
@@ -106,8 +106,10 @@ class QfcTestCase(APITransactionTestCase):
         self.assertProjectRole(p1, u8, None, None)
 
         # plan.max_premium_collaborators_per_private_project=-1 => add unlimited collaborators
-        org01.useraccount.plan.max_premium_collaborators_per_private_project = -1
-        org01.useraccount.plan.save()
+        org01.useraccount.active_subscription.plan.max_premium_collaborators_per_private_project = (
+            -1
+        )
+        org01.useraccount.active_subscription.plan.save()
 
         # adding an org admin user as project reader collaborator should not affect their admin rights
         p1.collaborators.create(collaborator=u2, role=Roles.READER)
@@ -168,8 +170,10 @@ class QfcTestCase(APITransactionTestCase):
         self.assertProjectRole(p1, u8, None, None)
 
         # plan.max_premium_collaborators_per_private_project=0
-        org01.useraccount.plan.max_premium_collaborators_per_private_project = 0
-        org01.useraccount.plan.save()
+        org01.useraccount.active_subscription.plan.max_premium_collaborators_per_private_project = (
+            0
+        )
+        org01.useraccount.active_subscription.plan.save()
         self.assertProjectRole(
             p1, u1, Roles.ADMIN, RoleOrigins.ORGANIZATIONOWNER, False
         )
@@ -184,8 +188,10 @@ class QfcTestCase(APITransactionTestCase):
         self.assertProjectRole(p1, u8, None, None)
 
         # plan.max_premium_collaborators_per_private_project=6
-        org01.useraccount.plan.max_premium_collaborators_per_private_project = 6
-        org01.useraccount.plan.save()
+        org01.useraccount.active_subscription.plan.max_premium_collaborators_per_private_project = (
+            6
+        )
+        org01.useraccount.active_subscription.plan.save()
         self.assertProjectRole(p1, u1, Roles.ADMIN, RoleOrigins.ORGANIZATIONOWNER, True)
         self.assertProjectRole(p1, u2, Roles.ADMIN, RoleOrigins.ORGANIZATIONADMIN, True)
         self.assertProjectRole(p1, u3, Roles.READER, RoleOrigins.COLLABORATOR, True)
@@ -196,8 +202,10 @@ class QfcTestCase(APITransactionTestCase):
         self.assertProjectRole(p1, u8, None, None)
 
         # plan.max_premium_collaborators_per_private_project=6 and is_public=True
-        org01.useraccount.plan.max_premium_collaborators_per_private_project = 0
-        org01.useraccount.plan.save()
+        org01.useraccount.active_subscription.plan.max_premium_collaborators_per_private_project = (
+            0
+        )
+        org01.useraccount.active_subscription.plan.save()
         self.assertProjectRole(
             p1, u1, Roles.ADMIN, RoleOrigins.ORGANIZATIONOWNER, False
         )
@@ -242,21 +250,21 @@ class QfcTestCase(APITransactionTestCase):
             max_organization_members=1,
         )
 
-        o1.useraccount.plan = unlimited_plan
-        o1.useraccount.save()
+        o1.useraccount.active_subscription.plan = unlimited_plan
+        o1.useraccount.active_subscription.save()
 
         OrganizationMember.objects.create(member=u2, organization=o1)
         OrganizationMember.objects.create(member=u3, organization=o1)
 
-        o1.useraccount.plan = limited_plan
-        o1.useraccount.save()
+        o1.useraccount.active_subscription.plan = limited_plan
+        o1.useraccount.active_subscription.save()
 
         with self.assertRaises(ValidationError):
             OrganizationMember.objects.create(member=u4, organization=o1)
 
         o2 = Organization.objects.create(username="o2", organization_owner=u1)
-        o2.useraccount.plan = limited_plan
-        o2.useraccount.save()
+        o2.useraccount.active_subscription.plan = limited_plan
+        o2.useraccount.active_subscription.save()
 
         OrganizationMember.objects.create(member=u2, organization=o2)
 
@@ -271,8 +279,8 @@ class QfcTestCase(APITransactionTestCase):
             max_trial_organizations=0,
         )
 
-        u1.useraccount.plan = plan
-        u1.useraccount.save()
+        u1.useraccount.active_subscription.plan = plan
+        u1.useraccount.active_subscription.save()
 
         with self.assertRaises(ValidationError):
             Organization.objects.create(username="o1", organization_owner=u1)

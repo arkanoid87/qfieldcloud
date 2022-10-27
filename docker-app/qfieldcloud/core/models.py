@@ -710,7 +710,7 @@ class OrganizationMember(models.Model):
             raise ValidationError(_("Cannot add the organization owner as a member."))
 
         max_organization_members = (
-            self.organization.useraccount.plan.max_organization_members
+            self.organization.useraccount.active_subscription.plan.max_organization_members
         )
         if (
             max_organization_members > -1
@@ -1114,7 +1114,7 @@ class Project(models.Model):
             status = Project.Status.OK
             status_code = Project.StatusCode.OK
             max_premium_collaborators_per_private_project = (
-                self.owner.useraccount.plan.max_premium_collaborators_per_private_project
+                self.owner.useraccount.active_subscription.plan.max_premium_collaborators_per_private_project
             )
 
             if not self.project_filename:
@@ -1368,7 +1368,7 @@ class Delta(models.Model):
     def is_supported_regarding_owner_account(self):
         return (
             not self.project.has_online_vector_data
-            or self.project.owner.useraccount.plan.is_external_db_supported
+            or self.project.owner.useraccount.active_subscription.plan.is_external_db_supported
         )
 
 
